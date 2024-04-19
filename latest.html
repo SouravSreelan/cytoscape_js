@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Cytoscape.js Circle Layout</title>
+  <script src="https://unpkg.com/cytoscape/dist/cytoscape.min.js"></script>
+  <style type="text/css">
+    .cy-container {
+      border: 1px solid black;
+      background-color: #614444;
+      margin: 2vh 0px 2vh 2vh;
+    }
+    
+    #cy {
+      width: 100%;
+      height: 3000px; 
+      display: block;
+      background-color: #fff;
+    }
+  </style>
+</head>
+<body>
+    <button id="downloadBtn" class="btn btn-lg btn-outline-success bbtn">Download</button>
+    <button id="download-cy-png" style="color: white; background-color: #008CBA; width: 100px; height: 30px;">Save as PNG</button>
+    <div id="cy"></div>
+    <img src="" id = "cy-network-img" style="display:none;">
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      fetch('COMPLEX.csv')
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('Network response was not ok');
+          }
+          return response.text();
+        })
+        .then(csvData => {
+          const dataArray = csvData
+            .split("\n") 
+            .map((row) => row.trim()) 
+            .filter((row) => row !== "" && !row.startsWith("protein")) 
+            .map((row) => {
+              const [gene, site, count] = row.split(",");
+              return { gene: gene.trim(), site: site.trim(), count_up_up: parseInt(count.trim()) };
+            });
+          const geneNames = dataArray
+            .map(data => data.gene)
+            .filter(gene => gene !== "SLK");
+
+          const siteNames = dataArray
+            .map(data => data.site)
+            .filter(gene => gene !== "SLK");
+
+            const maxCountUpUp = Math.max(...dataArray.map(data => data.count_up_up));
+            console.log(maxCountUpUp)
+
+
+          const cy = cytoscape({
+            container: document.getElementById("cy"),
+            elements: [
+              { data: { id: "SLK" } },
+
+              ...dataArray.map(data => ({ data: { id: data.gene } })),
+
+              ...geneNames.map(gene => ({ data: { source: "SLK", target: gene } })),
+            ],
+            style: [
+              {
+                selector: "node",
+                style: {
+                  "background-color": "#1A5276", 
+                  label: "data(id)",
+                  "shape": "ellipse",
+                  "width": "110px",
+                  "height": "80px",
+                  "font-size": "30px",
+                  'color':"white",
+                  "text-valign" : "center",
+                  "text-halign" : "center",
+                  
+
+                },
+              },
+              {
+                selector: "node[id='SLK']",
+                style: {
+                  "background-color": "#873600", 
+                  "shape": "rectangle",
+                  "width": "250px",
+                  "height": "110px",
+                  'color':"white",
+                  "font-size": "80px",
+                  
+                },
+              },
+              {
+                selector: "node[id^='site_']", 
+                style: {
+                  "background-color": "#D4AC0D", 
+                  "shape": "circle",
+                  "border-width": "3px", 
+                  "border-color": "#ffffff",
+                  'color':"black",
+                label: "data(label)",
+                fit: true,
+                "width": (ele) => {
+          const countUpUp = ele.data("count");
+          const normalizedSize = countUpUp * 4;
+          return normalizedSize;
+        }, 
+        "height": (ele) => {
+          const countUpUp = ele.data("count");
+          const normalizedSize = countUpUp * 4;
+          return normalizedSize;
+        }
+                },
+              },
+              {
+                selector: "edge",
+                style: {
+                  width: 2,
+                  "line-color": "#ccc",
+                  "padding": 1,
+                
+                },
+              },
+            ],
+            layout: {
+              name: "concentric", 
+              padding: 1,
+              idealEdgeLength: 100,
+              nodeOverlap: 600,
+              edgeElasticity: 100,
+              nestingFactor: 700,
+              minNodeSpacing: 1, 
+              avoidOverlap: true,
+              fit: true,
+              nodeDimensionsIncludeLabels: true,
+            },
+          });
+
+          const uniqueSites = {};
+  dataArray.forEach(data => {
+    const siteId = `site_${data.site}_${data.gene}`;
+    if (!uniqueSites[siteId]) {
+      uniqueSites[siteId] = true;
+      cy.add({ data: { id: siteId, label: data.site, count: data.count_up_up } }); 
+    }
+    cy.add({ data: { source: siteId, target: data.gene } });
+  });
+
+          const centerX = cy.width() / 2;
+          const centerY = cy.height() / 2;
+          const radius = 5; 
+          const siteOffset = 110; 
+
+          geneNames.forEach((gene, index) => {
+            const angle = (2 * Math.PI * index) / geneNames.length;
+            const geneNode = cy.getElementById(gene);
+            const geneX = geneNode.position().x;
+            const geneY = geneNode.position().y;
+            const x = geneX + radius * Math.cos(angle);
+            const y = geneY + radius * Math.sin(angle);
+            const associatedSites = dataArray.filter(data => data.gene === gene).map(data => data.site);
+            const angleIncrement = (2 * Math.PI) / associatedSites.length;
+            let currentAngle = angle - (angleIncrement * (associatedSites.length - 1)) / 2;
+            associatedSites.forEach(site => {
+              const siteId = `site_${site}_${gene}`; 
+              const siteX = x + siteOffset * Math.cos(currentAngle);
+              const siteY = y + siteOffset * Math.sin(currentAngle);
+              cy.getElementById(siteId).position({ x: siteX, y: siteY});
+              currentAngle += angleIncrement;
+            });
+          });
+          imgDiv = document.getElementById('cy-network-img');
+    document.querySelector('#download-cy-png').addEventListener('click', function() {
+var png64 = cy.png({ full: 'true' });
+
+var link = document.createElement('a');
+link.href = png64;
+link.download = `cytoscape.png`;
+document.body.appendChild(link);
+link.click();
+document.body.removeChild(link);
+
+});
+        })
+        .catch(error => console.error('Error fetching CSV data:', error));
+    });
+  </script>
+</body>
+</html>
